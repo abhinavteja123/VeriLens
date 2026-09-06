@@ -20,7 +20,7 @@ const GREEN    = "3FBE6B";  // used sparingly for "real/accept" contrast against
 const FONT_HEAD = "Cambria";
 const FONT_BODY = "Calibri";
 
-const TOTAL_SLIDES = 8;
+const TOTAL_SLIDES = 9;
 
 const pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE";
@@ -148,22 +148,23 @@ function pastePlaceholder(slide, { x, y, w, h, label }) {
 }
 
 // =====================================================================
-// SLIDE 4 — THE SIX CHECKS (lanes, plain language)
+// SLIDE 4 — THE SEVEN CHECKS (lanes, plain language)
 // =====================================================================
 {
   const s = pres.addSlide({ masterName: "DARK" });
-  kicker(s, "The Six Checks");
-  title(s, "Six checks. Each looks for a different kind of fake.", { size: 26, w: 12 });
+  kicker(s, "The Seven Checks");
+  title(s, "Seven checks. Each looks for a different kind of fake.", { size: 26, w: 12 });
 
   const lanes = [
-    { icon: "layers", n: "A", h: "Local Synthesis", d: "Looks for AI-edited or pasted parts of the photo." },
+    { icon: "layers", n: "A", h: "Local Synthesis", d: "Looks for AI-edited or pasted parts. Shown as evidence — it no longer votes." },
     { icon: "magnify", n: "B", h: "Noise Residual", d: "Real cameras leave tiny noise. AI images are too clean." },
     { icon: "code", n: "C", h: "Compression / ELA", d: "Checks if part of the photo was edited and re-saved." },
     { icon: "camera", n: "D", h: "Capture Attestation", d: "Proves the selfie was really taken live, right now." },
     { icon: "usershield", n: "E", h: "Face Match", d: "Checks the selfie is the same person as the ID photo." },
-    { icon: "mobile", n: "G", h: "Replay Detection", d: "Catches someone holding up a screen or printout instead of a real face." },
+    { icon: "mobile", n: "G", h: "Moire Detection", d: "Looks for the interference pattern a photographed screen leaves behind." },
+    { icon: "eyeslash", n: "H", h: "Visual Replay Check", d: "Spots a screen bezel, browser tabs, glare or a cursor in the frame. Our strongest check." },
   ];
-  const cw = 1.74, gap = 0.115, startX = 0.6, cy = 2.05, ch = 2.85;
+  const cw = 1.49, gap = 0.115, startX = 0.6, cy = 2.05, ch = 2.85;
   lanes.forEach((l, i) => {
     const x = startX + i * (cw + gap);
     s.addShape("roundRect", { x, y: cy, w: cw, h: ch, rectRadius: 0.09, fill: { color: CHARCOAL }, line: { color: "2E2E2E", width: 0.75 } });
@@ -178,7 +179,7 @@ function pastePlaceholder(slide, { x, y, w, h, label }) {
   s.addShape("roundRect", { x: 0.6, y: jy, w: 11.13, h: jh, rectRadius: 0.1, fill: { color: YELLOW }, line: { type: "none" } });
   badge(s, { x: 0.85, y: jy + (jh - 0.5) / 2, d: 0.5, style: "dark", iconName: "scale", iconScale: 0.55 });
   s.addText("One Judge Decides", { x: 1.55, y: jy + 0.12, w: 3.4, h: 0.3, fontFace: FONT_BODY, fontSize: 13, bold: true, color: BLACK, isTextBox: true, margin: 0 });
-  s.addText("Weighs all six checks together — and says exactly which ones agreed or disagreed, and why.", { x: 1.55, y: jy + 0.42, w: 9.9, h: 0.35, fontFace: FONT_BODY, fontSize: 11, color: "3A3A3A", isTextBox: true, margin: 0 });
+  s.addText("Weighs the voting checks together — and says exactly which ones agreed or disagreed, and why.", { x: 1.55, y: jy + 0.42, w: 9.9, h: 0.35, fontFace: FONT_BODY, fontSize: 11, color: "3A3A3A", isTextBox: true, margin: 0 });
   pageNum(s, 4);
 }
 
@@ -248,14 +249,64 @@ function pastePlaceholder(slide, { x, y, w, h, label }) {
   });
 
   s.addShape("roundRect", { x: 0.6, y: ry + 0.15, w: 11.13, h: 0.75, rectRadius: 0.1, fill: { color: CHARCOAL }, line: { color: YELLOW_DK, width: 1 } });
-  s.addText("Still learning: being retrained on more real-world photos to reduce mistakes — its confidence is deliberately capped until that's done.", {
-    x: 0.9, y: ry + 0.15, w: 10.5, h: 0.75, fontFace: FONT_BODY, fontSize: 11.5, italic: true, color: YELLOW, isTextBox: true, margin: 0, valign: "middle", lineSpacingMultiple: 1.2,
+  s.addText("What we found: on real captures this model scored 0.87 on a genuine ID card and 0.00 on four screen replays — backwards. It now shows as evidence only and casts no vote. We report that rather than hide it.", {
+    x: 0.9, y: ry + 0.15, w: 10.5, h: 0.75, fontFace: FONT_BODY, fontSize: 10.5, italic: true, color: YELLOW, isTextBox: true, margin: 0, valign: "middle", lineSpacingMultiple: 1.15,
   });
   pageNum(s, 6);
 }
 
 // =====================================================================
-// SLIDE 7 — THE PAPER WE BUILD ON (image placeholder, 2-line caption)
+// SLIDE 7 — WHAT WE MEASURED (before/after on real captures)
+// =====================================================================
+{
+  const s = pres.addSlide({ masterName: "DARK" });
+  kicker(s, "Measured, Not Claimed");
+  title(s, "We tested it against our own real captures — and it was failing", { size: 25, w: 12.2 });
+
+  s.addText(
+    "Six real KYC attempts pulled from our own storage. Four of the six ID photos turned out to be photos of a laptop screen.",
+    { x: 0.6, y: 1.72, w: 11.13, h: 0.4, fontFace: FONT_BODY, fontSize: 12.5, color: MUTED, isTextBox: true, margin: 0 }
+  );
+
+  statCallout(s, { x: 0.6,  y: 2.22, w: 2.6, h: 1.32, num: "2 \u2192 0", label: "Fakes wrongly ACCEPTED", numColor: GREEN });
+  statCallout(s, { x: 3.35, y: 2.22, w: 2.6, h: 1.32, num: "1 / 4", label: "Screen replays caught, before", numColor: RED });
+  statCallout(s, { x: 6.1,  y: 2.22, w: 2.6, h: 1.32, num: "4 / 4", label: "Screen replays caught, after", numColor: GREEN });
+  statCallout(s, { x: 8.85, y: 2.22, w: 2.88, h: 1.32, num: "0", label: "Real users wrongly rejected", numColor: GREEN });
+
+  const ry0 = 3.78, rh = 0.43;
+  s.addShape("roundRect", { x: 0.6, y: ry0, w: 11.13, h: 0.42, rectRadius: 0.06, fill: { color: CHARCOAL2 }, line: { type: "none" } });
+  const cols = [
+    { t: "What was submitted", x: 0.85, w: 5.6 },
+    { t: "Before", x: 6.55, w: 2.3 },
+    { t: "After", x: 8.95, w: 2.6 },
+  ];
+  cols.forEach((c) => s.addText(c.t, { x: c.x, y: ry0 + 0.06, w: c.w, h: 0.3, fontFace: FONT_BODY, fontSize: 10.5, bold: true, color: YELLOW, charSpacing: 1, isTextBox: true, margin: 0 }));
+
+  const rows = [
+    { w: "Genuine card + genuine selfie", b: "REVIEW",  a: "ACCEPT", ok: true },
+    { w: "ID photographed off a screen",  b: "ACCEPT",  a: "REJECT", ok: true, bad: true },
+    { w: "ID photographed off a screen",  b: "ACCEPT",  a: "REJECT", ok: true, bad: true },
+    { w: "Both photos off a screen",      b: "REVIEW",  a: "REJECT", ok: true },
+    { w: "Screen replay + wrong person",  b: "REJECT",  a: "REJECT", ok: true },
+    { w: "Back of card (no face on it)",  b: "REVIEW",  a: "REVIEW", ok: true },
+  ];
+  rows.forEach((r, i) => {
+    const y = ry0 + 0.46 + i * rh;
+    s.addShape("roundRect", { x: 0.6, y, w: 11.13, h: rh - 0.06, rectRadius: 0.06, fill: { color: i % 2 ? CHARCOAL2 : CHARCOAL }, line: { type: "none" } });
+    s.addText(r.w, { x: 0.85, y: y + 0.09, w: 5.6, h: 0.32, fontFace: FONT_BODY, fontSize: 11, color: WHITE, isTextBox: true, margin: 0 });
+    s.addText(r.b, { x: 6.55, y: y + 0.09, w: 2.3, h: 0.32, fontFace: FONT_BODY, fontSize: 11, bold: true, color: r.bad ? RED : MUTED, isTextBox: true, margin: 0 });
+    s.addText(r.a, { x: 8.95, y: y + 0.09, w: 2.6, h: 0.32, fontFace: FONT_BODY, fontSize: 11, bold: true, color: GREEN, isTextBox: true, margin: 0 });
+  });
+
+  s.addText(
+    "The two red rows are fakes our own system was accepting. We only found them by testing against real captures instead of trusting the model's own score.",
+    { x: 0.6, y: ry0 + 0.46 + rows.length * rh + 0.12, w: 11.13, h: 0.5, fontFace: FONT_BODY, fontSize: 11, italic: true, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.2 }
+  );
+  pageNum(s, 7);
+}
+
+// =====================================================================
+// SLIDE 8 — THE PAPER WE BUILD ON (image placeholder, 2-line caption)
 // =====================================================================
 {
   const s = pres.addSlide({ masterName: "DARK" });
@@ -269,11 +320,11 @@ function pastePlaceholder(slide, { x, y, w, h, label }) {
     "not the AI content itself. That's the exact trick we built and test our checks against.",
     { x: 0.6, y: 6.15, w: 11.13, h: 0.85, fontFace: FONT_BODY, fontSize: 13, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.3 }
   );
-  pageNum(s, 7);
+  pageNum(s, 8);
 }
 
 // =====================================================================
-// SLIDE 8 — DEMO PHOTOS (placeholder)
+// SLIDE 9 — DEMO PHOTOS (placeholder)
 // =====================================================================
 {
   const s = pres.addSlide({ masterName: "DARK" });
@@ -285,7 +336,7 @@ function pastePlaceholder(slide, { x, y, w, h, label }) {
   s.addText("Real captures, real verdicts — from testing this build, not a mockup.", {
     x: 0.6, y: 6.65, w: 11.13, h: 0.4, fontFace: FONT_BODY, fontSize: 12, italic: true, color: MUTED, isTextBox: true, margin: 0,
   });
-  pageNum(s, 8);
+  pageNum(s, 9);
 }
 
 pres.writeFile({ fileName: path.join(__dirname, "VeriLens_Pitch.pptx") }).then(() => console.log("written VeriLens_Pitch.pptx"));
