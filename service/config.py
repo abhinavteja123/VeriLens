@@ -87,10 +87,40 @@ class Config:
     # a crop that small (e.g. a low-res ID photo) is a weaker signal than the
     # same score off a full-resolution face, so it must clear a higher bar
     # before being called a MATCH rather than INDETERMINATE.
-    face_match_low_quality_margin: float = 0.15
+    #
+    # Was 0.15 (bar 0.53). Measured against two real low-quality-face pairs:
+    # a genuine pair matched at 0.5723 (passed) and a SEPARATE genuine pair
+    # at 0.5287 (failed by 0.0013 -- a razor's edge on real sub-112px ID
+    # crops, which is every real ID). Lowered to 0.13 (bar 0.51): clears
+    # 0.5287 with 0.0187 of headroom while staying well above
+    # face_match_above (0.38) and face_mismatch_below (0.22), so the
+    # low-quality path is still meaningfully stricter than a normal match,
+    # not just disabled. This is a two-point fit, not a calibration --
+    # the final value should come from scripts/regression.py's --sweep
+    # over the full labelled `real` set, not this manual pick.
+    face_match_low_quality_margin: float = 0.13
 
     ela_quality: int = 90  # recompression quality for Lane C
     max_analysis_side: int = 1600  # cap for CPU latency on free hosting
+
+    # ---- Lane H: VLM screen/print-replay + synthesis check (Groq) ----
+    # Verified live against the 6-case measured sample (PLAN.md Finding 4):
+    # confirmed screen replays scored screen_replay=1.00 on every one of
+    # them, genuine captures scored 0.05-0.10, and a genuine PRINTED ID
+    # scored print_replay=0.95 (correctly, since it really is printed
+    # paper -- see is_id_document handling in lane_h_vlm.py). Capped like
+    # Lane A/G's confidence until validated at scale beyond these 6 cases.
+    vlm_confidence_cap: float = 0.6
+    vlm_enabled: bool = True
+    # Score above which Lane H's screen_replay (checked on BOTH images) or
+    # print_replay (selfie only -- see judge.py) is trusted as an
+    # independent hard fail rather than averaged in, mirroring
+    # screen_replay_reject_above's role for Lane G. Set well below the
+    # measured replay score (1.00) and well above the measured genuine
+    # ceiling (0.10) so there's headroom on both sides of the one real
+    # sample this is tuned against; revisit once a larger labelled set
+    # exists.
+    vlm_replay_reject_above: float = 0.5
 
     # Confidence values are raw lane agreement, NOT calibrated probabilities.
     # Surfaced in /v1/model-card so nobody misreads them. Flip after W5.

@@ -103,6 +103,9 @@ def judge(
         identity = "INDETERMINATE"
         reasons.append(
             Reason("E", "Identity could not be verified: no face similarity was computed. "
+                        "If the ID document photo doesn't show a face (e.g. the back of the "
+                        "card, or a portrait too small to read), photograph the FRONT of the "
+                        "physical card with the printed photo clearly visible and resubmit. "
                         "Routing to review rather than accepting an unverified match.", "warn")
         )
 
@@ -115,7 +118,12 @@ def judge(
         return _abstain(reasons, identity)
 
     # Gate 2: enough independent lanes to cross-check each other?
-    usable = [r for r in lane_results if r.usable]
+    # r.voting excludes Lane A: measured anti-correlated with ground truth
+    # (PLAN.md Finding 2) and demonstrably the cause of a genuine pair
+    # failing (0.87 at confidence 0.5 pushed the aggregate 0.001 over
+    # real_below on its own). It stays fully visible below via the
+    # unfiltered lane_results loop -- only its vote is withheld.
+    usable = [r for r in lane_results if r.usable and r.voting]
     for r in lane_results:
         sev = "warn" if r.score >= CFG.fake_above else "info"
         for text in r.reasons:
@@ -148,20 +156,55 @@ def judge(
             (r for r in usable if r.lane == "G" and r.score >= CFG.screen_replay_reject_above),
             None,
         )
-    if screen_hit is not None:
-        reasons.append(Reason(
-            "G", f"Screen/print replay signature (score {screen_hit.score:.2f}) is treated "
-                 "as an independent hard fail, not averaged against other lanes.", "critical",
-        ))
+
+    # Lane H (VLM) ORs into the same hard-fail path, but on a DIFFERENT
+    # condition than Lane G -- do not conflate the two. Lane H's
+    # screen_replay is checked on BOTH images, unconditionally:
+    # apply_screen_replay_hard_gate=False for the ID image exists only to
+    # suppress Lane G's guilloche false positive (a real ID's own printed
+    # security pattern reads as FFT moire); it must not also blind the
+    # judge to a screen-replayed ID document, which is how 4 of the 6 real
+    # attacks in the measured sample arrive (PLAN.md Finding 4/design
+    # decision 5). Lane H's print_replay, by contrast, only hard-fails when
+    # apply_screen_replay_hard_gate is True (the selfie): a genuine PRINTED
+    # ID is supposed to read as printed (measured print_replay=0.95 on a
+    # real Aadhaar) -- exactly Lane G's guilloche trap again -- but a
+    # genuine selfie never legitimately does.
+    vlm_hit = None
+    vlm_field = None
+    for r in usable:
+        if r.lane != "H":
+            continue
+        if r.extra.get("screen_replay", 0.0) >= CFG.vlm_replay_reject_above:
+            vlm_hit, vlm_field = r, "screen_replay"
+            break
+        if apply_screen_replay_hard_gate and r.extra.get("print_replay", 0.0) >= CFG.vlm_replay_reject_above:
+            vlm_hit, vlm_field = r, "print_replay"
+            break
+
+    hard_hit = screen_hit or vlm_hit
+    if hard_hit is not None:
+        if hard_hit is screen_hit:
+            reasons.append(Reason(
+                "G", f"Screen/print replay signature (score {screen_hit.score:.2f}) is treated "
+                     "as an independent hard fail, not averaged against other lanes.", "critical",
+            ))
+            hard_conf = CFG.screen_replay_confidence
+        else:
+            reasons.append(Reason(
+                "H", f"VLM {vlm_field} score {hard_hit.extra.get(vlm_field, 0.0):.2f} is treated "
+                     "as an independent hard fail, not averaged against other lanes.", "critical",
+            ))
+            hard_conf = CFG.vlm_confidence_cap
         severity_order = {"critical": 0, "warn": 1, "info": 2}
         reasons.sort(key=lambda r: severity_order[r.severity])
         return Verdict(
             authenticity="LIKELY_FAKE",
             identity=identity,
             decision="REJECT",
-            confidence=CFG.screen_replay_confidence,
+            confidence=hard_conf,
             confidence_is_calibrated=CFG.confidence_is_calibrated,
-            score=round(screen_hit.score, 3),
+            score=round(hard_hit.score, 3),
             reasons=reasons,
         )
 
@@ -241,6 +284,26 @@ def judge(
         decision = "REVIEW"
     else:
         decision = "ACCEPT"
+
+    # Fail CLOSED when the only lane with measured signal is missing.
+    # Lanes A/B/C/G were all measured against real bucket captures and none of
+    # them separates a screen replay from a genuine capture (Lane A and Lane G
+    # are actively anti-correlated on ID documents). Lane H is what produced
+    # 4-of-4 replay catches. If it is configured as required but could not
+    # return a usable read -- no API key, a 429, a network error -- then this
+    # verdict rests on lanes that are known not to detect the primary attack,
+    # and the honest answer is REVIEW, not ACCEPT. Without this, an exhausted
+    # Groq quota silently restores the exact configuration that produced two
+    # false ACCEPTs on screen-replayed IDs.
+    if decision == "ACCEPT" and CFG.vlm_enabled:
+        vlm = next((r for r in lane_results if r.lane == "H"), None)
+        if vlm is None or not vlm.usable:
+            decision = "REVIEW"
+            reasons.append(Reason(
+                "H", "Routing to review: the visual synthesis/replay check could not "
+                     "complete, and the remaining lanes are not able to detect a "
+                     "screen replay on their own.", "warn",
+            ))
 
     severity_order = {"critical": 0, "warn": 1, "info": 2}
     reasons.sort(key=lambda r: severity_order[r.severity])

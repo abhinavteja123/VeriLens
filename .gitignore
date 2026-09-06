@@ -73,3 +73,11 @@ pitch/icons/
 pitch/*.jpg
 pitch/*.pdf
 pitch/icons_yb/
+
+# eval harness caches (downloaded/generated, never committed)
+service/.eval_cache/
+service/.vlm_cache/
+
+# secret backups (never commit - a .env copy still holds live keys)
+*.env.bak
+.env.bak

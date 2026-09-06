@@ -46,6 +46,16 @@ class LaneResult:
     confidence: float  # how much this lane's read can be trusted at all
     reasons: list[str] = field(default_factory=list)
     box: tuple[int, int, int, int] | None = None  # x, y, w, h in pixels
+    # Whether this lane counts toward the judge's weighted average and
+    # disagreement gate. Lane A sets this False: measured anti-correlated
+    # with ground truth (see PLAN.md Finding 2) -- it stays fully visible
+    # in the API/UI as evidence, it just doesn't get a vote.
+    voting: bool = True
+    # Structured, lane-specific values that don't fit a single 0-1 score
+    # (e.g. Lane H's separate screen_replay/print_replay/synthetic reads).
+    # Kept out of `score`/`reasons` so the judge can gate on the specific
+    # sub-signal it needs instead of parsing reason text.
+    extra: dict = field(default_factory=dict)
 
     @property
     def usable(self) -> bool:

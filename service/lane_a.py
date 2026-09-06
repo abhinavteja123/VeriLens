@@ -131,7 +131,7 @@ def _face_crop_bbox(bgr: np.ndarray) -> tuple[int, int, int, int] | None:
 def lane_a_synthesis(bgr: np.ndarray) -> LaneResult:
     model = _get_model()
     if model is None:
-        return LaneResult("A", "Local synthesis (trained)", 0.0, 0.0, [_load_error or "unavailable"])
+        return LaneResult("A", "Local synthesis (trained)", 0.0, 0.0, [_load_error or "unavailable"], voting=False)
 
     import torch
 
@@ -157,7 +157,7 @@ def lane_a_synthesis(bgr: np.ndarray) -> LaneResult:
     h, w = bgr.shape[:2]
     if min(h, w) < PATCH:
         return LaneResult("A", "Local synthesis (trained)", 0.0, 0.0,
-                          scan_notes + [f"Image smaller than the {PATCH}px patch size."])
+                          scan_notes + [f"Image smaller than the {PATCH}px patch size."], voting=False)
 
     crops, coords = _patches(bgr)
     # BGR uint8 -> RGB float, ImageNet normalisation (matches training)
@@ -193,7 +193,7 @@ def lane_a_synthesis(bgr: np.ndarray) -> LaneResult:
     # checkpoint records its own held-out accuracy on INP-X exchanged
     # images, which is the honest number to weight this lane by.
     conf = float(np.clip(_checkpoint_confidence(), 0.0, 1.0))
-    return LaneResult("A", "Local synthesis (trained)", score, conf, reasons, box)
+    return LaneResult("A", "Local synthesis (trained)", score, conf, reasons, box, voting=False)
 
 
 def _checkpoint_confidence() -> float:

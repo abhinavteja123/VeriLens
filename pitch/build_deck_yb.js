@@ -20,6 +20,8 @@ const GREEN    = "3FBE6B";  // used sparingly for "real/accept" contrast against
 const FONT_HEAD = "Cambria";
 const FONT_BODY = "Calibri";
 
+const TOTAL_SLIDES = 8;
+
 const pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE";
 const PW = 13.33, PH = 7.5;
@@ -37,7 +39,7 @@ function badge(slide, { x, y, d = 0.6, style = "yellow", iconName, iconScale = 0
 }
 
 function pageNum(slide, n) {
-  slide.addText(`${n} / 10`, { x: PW - 1.1, y: PH - 0.42, w: 0.9, h: 0.3, fontFace: FONT_BODY, fontSize: 10, color: MUTED_DK, align: "right", isTextBox: true, margin: 0 });
+  slide.addText(`${n} / ${TOTAL_SLIDES}`, { x: PW - 1.1, y: PH - 0.42, w: 0.9, h: 0.3, fontFace: FONT_BODY, fontSize: 10, color: MUTED_DK, align: "right", isTextBox: true, margin: 0 });
 }
 
 function kicker(slide, text, { x = 0.6, y = 0.5 } = {}) {
@@ -66,8 +68,14 @@ function statCallout(slide, { x, y, w, h, num, label, numColor = YELLOW }) {
   slide.addText(label, { x: x + 0.28, y: y + h * 0.58, w: w - 0.56, h: h * 0.38, fontFace: FONT_BODY, fontSize: 12.5, color: MUTED, isTextBox: true, margin: 0, valign: "top", lineSpacingMultiple: 1.15 });
 }
 
+// a dashed-look placeholder box for content the user will paste in by hand
+function pastePlaceholder(slide, { x, y, w, h, label }) {
+  slide.addShape("roundRect", { x, y, w, h, rectRadius: 0.1, fill: { color: CHARCOAL }, line: { color: YELLOW_DK, width: 1.25, dashType: "dash" } });
+  slide.addText(label, { x, y: y + h / 2 - 0.25, w, h: 0.5, fontFace: FONT_BODY, fontSize: 13, italic: true, color: MUTED_DK, align: "center", isTextBox: true, margin: 0 });
+}
+
 // =====================================================================
-// SLIDE 1 — TITLE
+// SLIDE 1 — TITLE (unchanged)
 // =====================================================================
 {
   const s = pres.addSlide({ masterName: "DARK" });
@@ -87,133 +95,73 @@ function statCallout(slide, { x, y, w, h, num, label, numColor = YELLOW }) {
 }
 
 // =====================================================================
-// SLIDE 2 — THE PROBLEM
+// SLIDE 2 — WHY THIS (simple, plain-language motivation)
 // =====================================================================
 {
   const s = pres.addSlide({ masterName: "DARK" });
-  kicker(s, "The Problem");
-  title(s, "KYC identity checks were built for a world\nwhere a photo was hard to fake.", { size: 30 });
-  s.addText("That world is gone.", { x: 0.6, y: 2.28, w: 8, h: 0.5, fontFace: FONT_BODY, fontSize: 16, italic: true, color: YELLOW, isTextBox: true, margin: 0 });
+  kicker(s, "Why This Matters");
+  title(s, "A photo used to prove you were real.\nNot anymore.", { size: 30 });
 
   const stats = [
-    { num: "11%", label: "of all global fraud in 2026 is deepfake-driven — up from 7% in 2024" },
-    { num: "+2,665%", label: "YoY surge in native virtual-camera injection attacks (iProov, 2026)" },
-    { num: "$20/mo", label: "buys real-time face-swap + camera injection as fraud-as-a-service" },
+    { num: "11%", label: "of all fraud today is driven by deepfakes" },
+    { num: "2,665%", label: "more fake-camera attacks than just last year" },
+    { num: "$20/mo", label: "buys anyone a ready-made face-swap tool" },
   ];
-  const gap = 0.35, cw = (11.13 - gap * 2) / 3, cy = 3.1, ch = 2.4;
+  const gap = 0.35, cw = (11.13 - gap * 2) / 3, cy = 2.6, ch = 2.3;
   stats.forEach((st, i) => statCallout(s, { x: 0.6 + i * (cw + gap), y: cy, w: cw, h: ch, num: st.num, label: st.label }));
 
   s.addText(
-    "Every hackathon team will show a photo, and a percentage. That answers the wrong question — the real attack is " +
-    "injecting a synthetic image at the exact point a bank trusts the camera.",
-    { x: 0.6, y: 5.85, w: 11.1, h: 0.9, fontFace: FONT_BODY, fontSize: 13.5, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.3 }
+    "Anyone can now fake a face on camera, cheaply and convincingly. A KYC check that only asks " +
+    "“does this photo look real?” is asking the wrong question — VeriLens is built to answer the " +
+    "right one: can this applicant be trusted?",
+    { x: 0.6, y: 5.25, w: 11.1, h: 1.1, fontFace: FONT_BODY, fontSize: 14, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.35 }
   );
   pageNum(s, 2);
 }
 
 // =====================================================================
-// SLIDE 3 — WHAT EVERYONE ELSE BUILDS
+// SLIDE 3 — HOW IT WORKS (5 simple steps)
 // =====================================================================
 {
   const s = pres.addSlide({ masterName: "DARK" });
-  kicker(s, "The Crowded Field");
-  title(s, "What a generic detector looks like", { size: 30 });
-
-  const rows = [
-    { icon: "eyeslash", h: "One image in", d: "No pairing to an identity document — detects a photo, not a KYC applicant." },
-    { icon: "question", h: "One opaque number out", d: "“87% fake.” No region, no signal, nothing a compliance officer can act on." },
-    { icon: "xmark", h: "Forced binary guess", d: "Blurry or compressed input still gets a confident verdict — no way to say “unsure.”" },
-    { icon: "warning", h: "Blind to the real attack", d: "Global-artifact detectors miss local edits — exactly what fraudsters use (next slide)." },
-  ];
-  const rowH = 1.0, startY = 2.1;
-  rows.forEach((r, i) => {
-    const y = startY + i * (rowH + 0.14);
-    s.addShape("roundRect", { x: 0.6, y, w: 11.13, h: rowH, rectRadius: 0.08, fill: { color: i % 2 ? CHARCOAL : CHARCOAL2 }, line: { type: "none" } });
-    badge(s, { x: 0.85, y: y + (rowH - 0.54) / 2, d: 0.54, style: "dark", iconName: r.icon, iconScale: 0.55 });
-    s.addText(r.h, { x: 1.65, y: y + 0.1, w: 4.3, h: 0.4, fontFace: FONT_BODY, fontSize: 15, bold: true, color: WHITE, isTextBox: true, margin: 0 });
-    s.addText(r.d, { x: 6.0, y: y + 0.08, w: 5.5, h: rowH - 0.18, fontFace: FONT_BODY, fontSize: 12, color: MUTED, isTextBox: true, margin: 0, valign: "middle", lineSpacingMultiple: 1.15 });
-  });
-  pageNum(s, 3);
-}
-
-// =====================================================================
-// SLIDE 4 — THE RESEARCH GAP
-// =====================================================================
-{
-  const s = pres.addSlide({ masterName: "DARK" });
-  kicker(s, "The Insight We Build On");
-  title(s, "Published detectors don’t fail randomly.\nThey fail in one specific, documented way.", { size: 27, w: 12 });
-
-  badge(s, { x: 0.6, y: 2.35, d: 0.6, style: "yellow", iconName: "flask" });
-  s.addText("arXiv 2602.00192 — “AI-Generated Image Detectors Overrely on Global Artifacts”", { x: 1.42, y: 2.4, w: 10.8, h: 0.55, fontFace: FONT_BODY, fontSize: 14.5, bold: true, color: WHITE, isTextBox: true, margin: 0 });
-  s.addText(
-    "Detectors learn a global VAE spectral shift left across the WHOLE image by inpainting — not the synthesised content itself. " +
-    "“Inpainting Exchange” (INP-X) restores original pixels outside the edited region, isolating that shortcut.",
-    { x: 1.42, y: 2.95, w: 10.7, h: 0.7, fontFace: FONT_BODY, fontSize: 12.5, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.25 }
-  );
-
-  const cy = 3.95, ch = 1.55, cw = 5.35, gap = 0.5;
-  s.addShape("roundRect", { x: 0.6, y: cy, w: cw, h: ch, rectRadius: 0.1, fill: { color: CHARCOAL }, line: { color: "2E2E2E", width: 0.75 } });
-  s.addText("Standard inpainting", { x: 0.9, y: cy + 0.16, w: cw - 0.6, h: 0.35, fontFace: FONT_BODY, fontSize: 12.5, color: MUTED, isTextBox: true, margin: 0 });
-  s.addText("~91%", { x: 0.9, y: cy + 0.5, w: cw - 0.6, h: 0.9, fontFace: FONT_HEAD, fontSize: 46, bold: true, color: YELLOW, isTextBox: true, margin: 0 });
-  s.addText("Sightengine & Hive accuracy", { x: 0.9, y: cy + ch - 0.35, w: cw - 0.6, h: 0.3, fontFace: FONT_BODY, fontSize: 10.5, color: MUTED, isTextBox: true, margin: 0 });
-
-  s.addShape("roundRect", { x: 0.6 + cw + gap, y: cy, w: cw, h: ch, rectRadius: 0.1, fill: { color: CHARCOAL }, line: { color: "2E2E2E", width: 0.75 } });
-  s.addText("On INP-X exchanged images", { x: 0.9 + cw + gap, y: cy + 0.16, w: cw - 0.6, h: 0.35, fontFace: FONT_BODY, fontSize: 12.5, color: MUTED, isTextBox: true, margin: 0 });
-  s.addText("~55%", { x: 0.9 + cw + gap, y: cy + 0.5, w: cw - 0.6, h: 0.9, fontFace: FONT_HEAD, fontSize: 46, bold: true, color: RED, isTextBox: true, margin: 0 });
-  s.addText("Chance level — a coin flip", { x: 0.9 + cw + gap, y: cy + ch - 0.35, w: cw - 0.6, h: 0.3, fontFace: FONT_BODY, fontSize: 10.5, color: MUTED, isTextBox: true, margin: 0 });
-
-  s.addText(
-    "The best fix published (FUSED, Aug 2026) explicitly excludes face manipulation. Faces are exactly what KYC checks — and " +
-    "the paper shows faces have the narrowest global-artifact shortcut, i.e. the domain where this blind spot matters most.",
-    { x: 0.6, y: 5.75, w: 11.1, h: 0.85, fontFace: FONT_BODY, fontSize: 12.5, color: YELLOW, isTextBox: true, margin: 0, lineSpacingMultiple: 1.3, italic: true }
-  );
-  pageNum(s, 4);
-}
-
-// =====================================================================
-// SLIDE 5 — THE PROCESS, AS LAYERS  (reworked: horizontal layer stack)
-// =====================================================================
-{
-  const s = pres.addSlide({ masterName: "DARK" });
-  kicker(s, "How It Works — Layer by Layer");
-  title(s, "One request. Five ordered layers.", { size: 30 });
+  kicker(s, "How It Works");
+  title(s, "One check. Five simple steps.", { size: 30 });
 
   const layers = [
-    { icon: "layercapture", h: "1. Capture", d: "ID document photo + live selfie. Selfie is camera-only — no gallery path." },
-    { icon: "layergate", h: "2. Quality Gate", d: "Resolution, blur, JPEG quality checked first. Unreadable input is rejected before any lane runs." },
-    { icon: "layerlanes", h: "3. Detection Lanes", d: "Six independent forensic checks run in parallel — synthesis, noise, compression, attestation, face match, replay detection." },
-    { icon: "layerjudge", h: "4. Judge", d: "Cross-checks which lanes agree. Disagreement or low coverage → abstain, not guess." },
-    { icon: "layerchain", h: "5. Verdict + Anchor", d: "Three-axis verdict returned, signed, and anchored on Sepolia — the decision is now auditable." },
+    { icon: "layercapture", h: "1. Capture", d: "Take a photo of your ID, then a live selfie." },
+    { icon: "layergate", h: "2. Quality Check", d: "Blurry or broken photos are stopped right away — before any test runs." },
+    { icon: "layerlanes", h: "3. Six Checks", d: "Six different tests look for signs of fakery, all at the same time." },
+    { icon: "layerjudge", h: "4. Judge", d: "If the tests agree, we decide. If they disagree, a person reviews it instead of guessing." },
+    { icon: "layerchain", h: "5. Verdict + Record", d: "The result is signed and saved on the blockchain — nobody can quietly change it later." },
   ];
 
   const startX = 0.6, barW = 11.13, barH = 0.92, gapY = 0.145, startY = 2.05;
   layers.forEach((l, i) => {
     const y = startY + i * (barH + gapY);
-    const indent = i * 0.16; // each layer nudges right — reads as a pipeline, not a list
+    const indent = i * 0.16;
     s.addShape("roundRect", { x: startX + indent, y, w: barW - indent, h: barH, rectRadius: 0.08, fill: { color: i % 2 ? CHARCOAL : CHARCOAL2 }, line: { color: YELLOW_DK, width: i === 2 ? 1.25 : 0 } });
     badge(s, { x: startX + indent + 0.18, y: y + (barH - 0.56) / 2, d: 0.56, style: "yellow", iconName: l.icon, iconScale: 0.55 });
     s.addText(l.h, { x: startX + indent + 0.9, y: y + 0.12, w: 2.6, h: barH - 0.24, fontFace: FONT_BODY, fontSize: 14, bold: true, color: WHITE, isTextBox: true, margin: 0, valign: "middle" });
     s.addText(l.d, { x: startX + indent + 3.6, y: y + 0.1, w: barW - indent - 3.85, h: barH - 0.2, fontFace: FONT_BODY, fontSize: 11.3, color: MUTED, isTextBox: true, margin: 0, valign: "middle", lineSpacingMultiple: 1.18 });
   });
-  pageNum(s, 5);
+  pageNum(s, 3);
 }
 
 // =====================================================================
-// SLIDE 6 — FIVE LANES, DETAIL
+// SLIDE 4 — THE SIX CHECKS (lanes, plain language)
 // =====================================================================
 {
   const s = pres.addSlide({ masterName: "DARK" });
-  kicker(s, "Layer 3, Expanded");
-  title(s, "Six independent lanes. One accountable judge.", { size: 28 });
+  kicker(s, "The Six Checks");
+  title(s, "Six checks. Each looks for a different kind of fake.", { size: 26, w: 12 });
 
   const lanes = [
-    { icon: "layers", n: "A", h: "Local Synthesis", d: "Patch-level, trained on INP-X exchanged images — reads content, not the global shortcut." },
-    { icon: "magnify", n: "B", h: "Noise Residual", d: "Flags regions unnaturally clean for their detail level — the signature of generated content." },
-    { icon: "code", n: "C", h: "Compression / ELA", d: "Recompression error inconsistent with local detail — catches splices and pasted portraits." },
-    { icon: "camera", n: "D", h: "Capture Attestation", d: "Signed, single-use nonce proves live capture — absence is never evidence of fakery." },
-    { icon: "usershield", n: "E", h: "Face Match", d: "ArcFace similarity between the ID photo and the selfie — the identity axis." },
-    { icon: "mobile", n: "G", h: "Replay Detection", d: "Patch-wise frequency analysis catches a screen or printout held up to the camera." },
+    { icon: "layers", n: "A", h: "Local Synthesis", d: "Looks for AI-edited or pasted parts of the photo." },
+    { icon: "magnify", n: "B", h: "Noise Residual", d: "Real cameras leave tiny noise. AI images are too clean." },
+    { icon: "code", n: "C", h: "Compression / ELA", d: "Checks if part of the photo was edited and re-saved." },
+    { icon: "camera", n: "D", h: "Capture Attestation", d: "Proves the selfie was really taken live, right now." },
+    { icon: "usershield", n: "E", h: "Face Match", d: "Checks the selfie is the same person as the ID photo." },
+    { icon: "mobile", n: "G", h: "Replay Detection", d: "Catches someone holding up a screen or printout instead of a real face." },
   ];
   const cw = 1.74, gap = 0.115, startX = 0.6, cy = 2.05, ch = 2.85;
   lanes.forEach((l, i) => {
@@ -229,143 +177,115 @@ function statCallout(slide, { x, y, w, h, num, label, numColor = YELLOW }) {
   const jy = cy + ch + 0.4, jh = 0.85;
   s.addShape("roundRect", { x: 0.6, y: jy, w: 11.13, h: jh, rectRadius: 0.1, fill: { color: YELLOW }, line: { type: "none" } });
   badge(s, { x: 0.85, y: jy + (jh - 0.5) / 2, d: 0.5, style: "dark", iconName: "scale", iconScale: 0.55 });
-  s.addText("Rule-based Judge", { x: 1.55, y: jy + 0.12, w: 3.4, h: 0.3, fontFace: FONT_BODY, fontSize: 13, bold: true, color: BLACK, isTextBox: true, margin: 0 });
-  s.addText("Cross-checks usable lanes · abstains on disagreement — explainable by construction, not a black box", { x: 1.55, y: jy + 0.42, w: 9.9, h: 0.35, fontFace: FONT_BODY, fontSize: 11, color: "3A3A3A", isTextBox: true, margin: 0 });
+  s.addText("One Judge Decides", { x: 1.55, y: jy + 0.12, w: 3.4, h: 0.3, fontFace: FONT_BODY, fontSize: 13, bold: true, color: BLACK, isTextBox: true, margin: 0 });
+  s.addText("Weighs all six checks together — and says exactly which ones agreed or disagreed, and why.", { x: 1.55, y: jy + 0.42, w: 9.9, h: 0.35, fontFace: FONT_BODY, fontSize: 11, color: "3A3A3A", isTextBox: true, margin: 0 });
+  pageNum(s, 4);
+}
+
+// =====================================================================
+// SLIDE 5 — USER FLOW + EVALUATION KIT
+// =====================================================================
+{
+  const s = pres.addSlide({ masterName: "DARK" });
+  kicker(s, "User Flow & How We Test It");
+  title(s, "What the user sees. How we prove it works.", { size: 27, w: 12 });
+
+  const steps = [
+    { icon: "idcard", h: "Scan ID", d: "Photo of the ID card." },
+    { icon: "camera", h: "Take Selfie", d: "Camera only — no gallery uploads." },
+    { icon: "layers", h: "Checks Run", d: "All six checks run together." },
+    { icon: "gavel", h: "Get Result", d: "Accept, reject, or human review." },
+    { icon: "link", h: "Saved On-Chain", d: "Signed and anchored — auditable." },
+  ];
+  const cw = 2.02, gap = 0.135, startX = 0.6, cy = 2.05, ch = 2.15;
+  steps.forEach((st, i) => {
+    const x = startX + i * (cw + gap);
+    s.addShape("roundRect", { x, y: cy, w: cw, h: ch, rectRadius: 0.09, fill: { color: CHARCOAL }, line: { color: "2E2E2E", width: 0.75 } });
+    s.addText(`${i + 1}`, { x: x + 0.12, y: cy + 0.1, w: 0.5, h: 0.35, fontFace: FONT_HEAD, fontSize: 15, bold: true, color: MUTED_DK, isTextBox: true, margin: 0 });
+    badge(s, { x: x + (cw - 0.5) / 2, y: cy + 0.45, d: 0.5, style: "yellow", iconName: st.icon, iconScale: 0.54 });
+    s.addText(st.h, { x: x + 0.1, y: cy + 1.08, w: cw - 0.2, h: 0.4, fontFace: FONT_BODY, fontSize: 12, bold: true, color: WHITE, align: "center", isTextBox: true, margin: 0 });
+    s.addText(st.d, { x: x + 0.12, y: cy + 1.5, w: cw - 0.24, h: ch - 1.6, fontFace: FONT_BODY, fontSize: 8.8, color: MUTED, align: "center", isTextBox: true, margin: 0, lineSpacingMultiple: 1.15 });
+    if (i < steps.length - 1) s.addText("›", { x: x + cw + 0.005, y: cy + ch / 2 - 0.25, w: 0.13, h: 0.5, fontFace: FONT_BODY, fontSize: 20, bold: true, color: YELLOW_DK, align: "center", isTextBox: true, margin: 0 });
+  });
+
+  const ey = cy + ch + 0.35, eh = 1.35;
+  s.addShape("roundRect", { x: 0.6, y: ey, w: 11.13, h: eh, rectRadius: 0.1, fill: { color: CHARCOAL2 }, line: { color: YELLOW, width: 1.25 } });
+  badge(s, { x: 0.85, y: ey + 0.2, d: 0.55, style: "yellow", iconName: "listcheck", iconScale: 0.55 });
+  s.addText("Evaluation Kit — don't just take our word for it", { x: 1.6, y: ey + 0.16, w: 9.9, h: 0.4, fontFace: FONT_BODY, fontSize: 14.5, bold: true, color: WHITE, isTextBox: true, margin: 0 });
+  s.addText(
+    "The same photo runs through our system AND a popular commercial detector, side by side, in one screen — " +
+    "so the comparison is live, not a claim on a slide.",
+    { x: 1.6, y: ey + 0.55, w: 9.9, h: 0.7, fontFace: FONT_BODY, fontSize: 11.5, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.25 }
+  );
+  pageNum(s, 5);
+}
+
+// =====================================================================
+// SLIDE 6 — LANE A: DATASET & MODEL (core part)
+// =====================================================================
+{
+  const s = pres.addSlide({ masterName: "DARK" });
+  kicker(s, "Inside Lane A — Our Trained Model");
+  title(s, "The one check we trained ourselves", { size: 29 });
+
+  badge(s, { x: 0.6, y: 2.15, d: 0.55, style: "yellow", iconName: "robot" });
+  s.addText("Model: EfficientNet-B0", { x: 1.35, y: 2.18, w: 10.3, h: 0.4, fontFace: FONT_BODY, fontSize: 16, bold: true, color: WHITE, isTextBox: true, margin: 0 });
+  s.addText("A small, fast image classifier — light enough to run on a normal server, no GPU required.", { x: 1.35, y: 2.55, w: 10.3, h: 0.4, fontFace: FONT_BODY, fontSize: 12, color: MUTED, isTextBox: true, margin: 0 });
+
+  s.addText("TRAINED ON", { x: 0.6, y: 3.25, w: 5, h: 0.3, fontFace: FONT_BODY, fontSize: 12, bold: true, color: YELLOW, charSpacing: 1.5, isTextBox: true, margin: 0 });
+
+  const rows = [
+    { icon: "cube", h: "INP-X (Inpainting-Exchange)", d: "Real photos with an AI-edited face pasted in — teaches the model to spot a local edit." },
+    { icon: "usershield", h: "140k Real-and-Fake Faces", d: "70,000 real photos vs. 70,000 StyleGAN-generated faces — teaches whole-image AI generation." },
+    { icon: "route", h: "Real-world photo mix", d: "CityScapes, OpenImages, SUN RGB-D — everyday photos, not just posed studio headshots." },
+  ];
+  let ry = 3.65;
+  rows.forEach((r) => {
+    badge(s, { x: 0.6, y: ry, d: 0.46, style: "dark", iconName: r.icon, iconScale: 0.55 });
+    s.addText(r.h, { x: 1.25, y: ry - 0.02, w: 10.4, h: 0.32, fontFace: FONT_BODY, fontSize: 13, bold: true, color: WHITE, isTextBox: true, margin: 0 });
+    s.addText(r.d, { x: 1.25, y: ry + 0.3, w: 10.4, h: 0.4, fontFace: FONT_BODY, fontSize: 10.8, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.15 });
+    ry += 0.85;
+  });
+
+  s.addShape("roundRect", { x: 0.6, y: ry + 0.15, w: 11.13, h: 0.75, rectRadius: 0.1, fill: { color: CHARCOAL }, line: { color: YELLOW_DK, width: 1 } });
+  s.addText("Still learning: being retrained on more real-world photos to reduce mistakes — its confidence is deliberately capped until that's done.", {
+    x: 0.9, y: ry + 0.15, w: 10.5, h: 0.75, fontFace: FONT_BODY, fontSize: 11.5, italic: true, color: YELLOW, isTextBox: true, margin: 0, valign: "middle", lineSpacingMultiple: 1.2,
+  });
   pageNum(s, 6);
 }
 
 // =====================================================================
-// SLIDE 7 — THREE-AXIS VERDICT + ABSTENTION
+// SLIDE 7 — THE PAPER WE BUILD ON (image placeholder, 2-line caption)
 // =====================================================================
 {
   const s = pres.addSlide({ masterName: "DARK" });
-  kicker(s, "The Output");
-  title(s, "Three independent axes. Never one blended score.", { size: 29 });
-  s.addText("“A real photo of the wrong person” and “an AI selfie of the right person” are different failures.", { x: 0.6, y: 1.78, w: 11.5, h: 0.4, fontFace: FONT_BODY, fontSize: 13, italic: true, color: MUTED, isTextBox: true, margin: 0 });
+  kicker(s, "The Research Behind It");
+  title(s, "Why we test this way", { size: 30 });
 
-  const axes = [
-    { icon: "check", label: "AUTHENTICITY", vals: ["REAL", "LIKELY_FAKE", "INSUFFICIENT_EVIDENCE"] },
-    { icon: "usershield", label: "IDENTITY", vals: ["MATCH", "MISMATCH", "INDETERMINATE"] },
-    { icon: "gavel", label: "DECISION", vals: ["ACCEPT", "REJECT", "REVIEW"] },
-  ];
-  const cw = 3.55, gap = 0.24, cy = 2.35, ch = 2.05;
-  axes.forEach((a, i) => {
-    const x = 0.6 + i * (cw + gap);
-    s.addShape("roundRect", { x, y: cy, w: cw, h: ch, rectRadius: 0.1, fill: { color: CHARCOAL }, line: { color: "2E2E2E", width: 0.75 } });
-    badge(s, { x: x + 0.2, y: cy + 0.2, d: 0.48, style: "yellow", iconName: a.icon, iconScale: 0.55 });
-    s.addText(a.label, { x: x + 0.82, y: cy + 0.24, w: cw - 1.0, h: 0.4, fontFace: FONT_BODY, fontSize: 13, bold: true, color: WHITE, isTextBox: true, margin: 0, valign: "middle" });
-    a.vals.forEach((v, j) => s.addText(v, { x: x + 0.22, y: cy + 0.82 + j * 0.38, w: cw - 0.44, h: 0.34, fontFace: FONT_BODY, fontSize: 11.5, color: MUTED, isTextBox: true, margin: 0 }));
-  });
+  pastePlaceholder(s, { x: 0.6, y: 2.1, w: 11.13, h: 3.9, label: "[ paste paper figure / screenshot here ]" });
 
-  s.addShape("roundRect", { x: 0.6, y: cy + ch + 0.28, w: 11.13, h: 1.5, rectRadius: 0.1, fill: { color: CHARCOAL2 }, line: { color: YELLOW, width: 1.25 } });
-  badge(s, { x: 0.85, y: cy + ch + 0.46, d: 0.58, style: "yellow", iconName: "question", iconScale: 0.55 });
-  s.addText("Abstention is a feature, not a gap.", { x: 1.65, y: cy + ch + 0.4, w: 9.9, h: 0.4, fontFace: FONT_BODY, fontSize: 15, bold: true, color: WHITE, isTextBox: true, margin: 0 });
   s.addText(
-    "Four independent triggers route to review: unreadable image quality, too few usable lanes, lane disagreement, or a score inside the " +
-    "uncertainty band. A confidently wrong reject locks a real person out of their bank account — refusing to guess is the correct output.",
-    { x: 1.65, y: cy + ch + 0.75, w: 9.9, h: 0.85, fontFace: FONT_BODY, fontSize: 11.3, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.25 }
+    "arXiv 2602.00192 — most AI-photo detectors get fooled once an edit is pasted into a real photo, " +
+    "not the AI content itself. That's the exact trick we built and test our checks against.",
+    { x: 0.6, y: 6.15, w: 11.13, h: 0.85, fontFace: FONT_BODY, fontSize: 13, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.3 }
   );
   pageNum(s, 7);
 }
 
 // =====================================================================
-// SLIDE 8 — DEMO FLOW
+// SLIDE 8 — DEMO PHOTOS (placeholder)
 // =====================================================================
 {
   const s = pres.addSlide({ masterName: "DARK" });
-  kicker(s, "How A Check Actually Runs");
-  title(s, "One KYC check, start to finish", { size: 30 });
+  kicker(s, "Live Demo");
+  title(s, "See it in action", { size: 32 });
 
-  const steps = [
-    { icon: "idcard", h: "ID Document", d: "Photo of the ID card. Gallery import allowed." },
-    { icon: "camera", h: "Live Selfie", d: "Camera-only — no gallery path. Blocks the injection attack." },
-    { icon: "layers", h: "Forensic Lanes", d: "Quality gate, then lanes run in parallel on both images." },
-    { icon: "gavel", h: "Verdict + Reasons", d: "Three axes, per-lane evidence, confidence labelled uncalibrated." },
-    { icon: "link", h: "Anchored", d: "Verdict digest signed + anchored on Sepolia. Auditable, forever." },
-  ];
-  const cw = 2.02, gap = 0.135, startX = 0.6, cy = 2.2, ch = 2.9;
-  steps.forEach((st, i) => {
-    const x = startX + i * (cw + gap);
-    s.addShape("roundRect", { x, y: cy, w: cw, h: ch, rectRadius: 0.09, fill: { color: CHARCOAL }, line: { color: "2E2E2E", width: 0.75 } });
-    s.addText(`${i + 1}`, { x: x + 0.12, y: cy + 0.12, w: 0.5, h: 0.4, fontFace: FONT_HEAD, fontSize: 16, bold: true, color: MUTED_DK, isTextBox: true, margin: 0 });
-    badge(s, { x: x + (cw - 0.54) / 2, y: cy + 0.55, d: 0.54, style: "yellow", iconName: st.icon, iconScale: 0.54 });
-    s.addText(st.h, { x: x + 0.12, y: cy + 1.28, w: cw - 0.24, h: 0.5, fontFace: FONT_BODY, fontSize: 12.5, bold: true, color: WHITE, align: "center", isTextBox: true, margin: 0 });
-    s.addText(st.d, { x: x + 0.14, y: cy + 1.8, w: cw - 0.28, h: ch - 1.95, fontFace: FONT_BODY, fontSize: 9, color: MUTED, align: "center", isTextBox: true, margin: 0, lineSpacingMultiple: 1.15 });
-    if (i < steps.length - 1) s.addText("›", { x: x + cw + 0.005, y: cy + ch / 2 - 0.25, w: 0.13, h: 0.5, fontFace: FONT_BODY, fontSize: 20, bold: true, color: YELLOW_DK, align: "center", isTextBox: true, margin: 0 });
+  pastePlaceholder(s, { x: 0.6, y: 2.1, w: 11.13, h: 4.4, label: "[ paste demo screenshots / photos here ]" });
+
+  s.addText("Real captures, real verdicts — from testing this build, not a mockup.", {
+    x: 0.6, y: 6.65, w: 11.13, h: 0.4, fontFace: FONT_BODY, fontSize: 12, italic: true, color: MUTED, isTextBox: true, margin: 0,
   });
-
-  s.addText(
-    "Same app, same image, side by side: /v1/baseline runs a commercial detector and our judge together — the comparison the live demo turns on.",
-    { x: 0.6, y: cy + ch + 0.3, w: 11.1, h: 0.5, fontFace: FONT_BODY, fontSize: 12.5, italic: true, color: MUTED, isTextBox: true, margin: 0 }
-  );
   pageNum(s, 8);
-}
-
-// =====================================================================
-// SLIDE 9 — AUDIT TRAIL + HONESTY (combined)
-// =====================================================================
-{
-  const s = pres.addSlide({ masterName: "DARK" });
-  kicker(s, "The Audit Trail & What We Don’t Claim");
-  title(s, "The verdict is tamper-proof — and we say what it isn’t.", { size: 25, w: 12.1 });
-
-  // left: audit trail items
-  const left = 0.6, lw = 5.5, iy0 = 2.1;
-  const items = [
-    { icon: "fingerprint", h: "SHA-256 + Ed25519", d: "Both images hashed and signed by a per-device key at capture." },
-    { icon: "cube", h: "Verdict digest anchored", d: "Hash of {hashes + authenticity + identity + decision + confidence + time} — not just the photo hash." },
-    { icon: "link", h: "Ethereum Sepolia", d: "Data-only self-transfer, ABI-encoded payload. No contract deploy required." },
-  ];
-  let iy = iy0;
-  items.forEach((it) => {
-    badge(s, { x: left, y: iy, d: 0.46, style: "yellow", iconName: it.icon, iconScale: 0.55 });
-    s.addText(it.h, { x: left + 0.65, y: iy - 0.02, w: lw - 0.65, h: 0.32, fontFace: FONT_BODY, fontSize: 12.5, bold: true, color: WHITE, isTextBox: true, margin: 0 });
-    s.addText(it.d, { x: left + 0.65, y: iy + 0.3, w: lw - 0.65, h: 0.55, fontFace: FONT_BODY, fontSize: 10.3, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.18 });
-    iy += 0.92;
-  });
-
-  // right: what we don't claim (honesty cards, stacked)
-  const rx = 6.55, rw = 5.2;
-  const claims = [
-    { icon: "info", h: "No novelty claim", d: "Established forensics. Our contribution is the KYC-specific system, not a new algorithm." },
-    { icon: "scale", h: "Confidence uncalibrated", d: "Flagged false until validated — never shown as a real probability." },
-    { icon: "eyeslash", h: "Trained lane still calibrating", d: "Confidence capped until validated on real-world photos, not just its own training set — a broader retrain is in progress." },
-  ];
-  let ry = 2.1;
-  claims.forEach((c) => {
-    s.addShape("roundRect", { x: rx, y: ry, w: rw, h: 1.28, rectRadius: 0.08, fill: { color: CHARCOAL }, line: { type: "none" } });
-    badge(s, { x: rx + 0.18, y: ry + 0.18, d: 0.44, style: "dark", iconName: c.icon, iconScale: 0.55 });
-    s.addText(c.h, { x: rx + 0.75, y: ry + 0.14, w: rw - 0.95, h: 0.32, fontFace: FONT_BODY, fontSize: 12, bold: true, color: YELLOW, isTextBox: true, margin: 0 });
-    s.addText(c.d, { x: rx + 0.75, y: ry + 0.46, w: rw - 0.95, h: 0.75, fontFace: FONT_BODY, fontSize: 9.8, color: MUTED, isTextBox: true, margin: 0, lineSpacingMultiple: 1.18 });
-    ry += 1.42;
-  });
-  pageNum(s, 9);
-}
-
-// =====================================================================
-// SLIDE 10 — WHY WE STAND OUT / CLOSING
-// =====================================================================
-{
-  const s = pres.addSlide({ masterName: "DARK" });
-  kicker(s, "Why VeriLens Stands Out");
-  title(s, "Others tell you if an image looks fake.\nWe tell you whether to trust the applicant.", { size: 27, w: 12, y: 1.15 });
-
-  const pts = [
-    { icon: "idcard", t: "ID + selfie, face-matched — real KYC, not a generic upload box" },
-    { icon: "flask", t: "Targets a documented, published blind spot — not a vague novelty claim" },
-    { icon: "gavel", t: "Per-lane reasoning and honest abstention — never a forced guess" },
-    { icon: "link", t: "The decision itself is signed and anchored — a real audit trail" },
-  ];
-  let py = 3.15;
-  pts.forEach((p) => {
-    badge(s, { x: 0.7, y: py, d: 0.46, style: "yellow", iconName: p.icon, iconScale: 0.55 });
-    s.addText(p.t, { x: 1.35, y: py + 0.02, w: 10.7, h: 0.42, fontFace: FONT_BODY, fontSize: 14, color: WHITE, isTextBox: true, margin: 0, valign: "middle" });
-    py += 0.6;
-  });
-
-  s.addShape("rect", { x: PW / 2 - 1.6, y: 5.85, w: 3.2, h: 0.013, fill: { color: "2E2E2E" }, line: { type: "none" } });
-  s.addText("Thank you — questions welcome.", { x: 0, y: 6.15, w: PW, h: 0.5, fontFace: FONT_HEAD, fontSize: 18, bold: true, color: YELLOW, align: "center", isTextBox: true, margin: 0 });
-  pageNum(s, 10);
 }
 
 pres.writeFile({ fileName: path.join(__dirname, "VeriLens_Pitch.pptx") }).then(() => console.log("written VeriLens_Pitch.pptx"));

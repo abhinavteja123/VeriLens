@@ -1,0 +1,32 @@
+{
+  "mtog7qvp9bs3ng": {
+    "label": "screen_replay_id",
+    "expect": "REJECT",
+    "note": "ID photographed off a laptop screen (WhatsApp Web chrome visible); selfie genuine."
+  },
+  "mtooj6s07t9bt9": {
+    "label": "screen_replay_both",
+    "expect": "REJECT",
+    "note": "Both ID and selfie photographed off a screen (macOS Photos filmstrip visible on selfie)."
+  },
+  "mtosdrgjxy16vn": {
+    "label": "no_face_id",
+    "expect": "REVIEW",
+    "note": "Genuine paper Aadhaar, BACK side (no face); selfie genuine. No face on ID to match against."
+  },
+  "mtotdsyygxr48f": {
+    "label": "screen_replay_id",
+    "expect": "REJECT",
+    "note": "ID photographed off a screen; selfie genuine."
+  },
+  "mtotin2bx81n9y": {
+    "label": "screen_replay_id",
+    "expect": "REJECT",
+    "note": "ID photographed off a screen; selfie genuine but of a DIFFERENT person (identity MISMATCH too)."
+  },
+  "mtowju5afd5obu": {
+    "label": "real",
+    "expect": "ACCEPT",
+    "note": "Genuine physical PVC card + genuine selfie of the same person."
+  }
+}

@@ -173,6 +173,8 @@ def test_screen_replay_hard_gate_can_be_disabled_for_id_document():
         LaneResult("C", "Compression / ELA", 0.02, 0.9),
         LaneResult("A", "Local synthesis", 0.46, CFG.lane_a_confidence_cap),
         LaneResult("G", "Screen/print replay", 0.17, CFG.screen_replay_confidence),
+        LaneResult("H", "Visual synthesis & replay check", 0.05, CFG.vlm_confidence_cap,
+                   ["stub clean VLM read"], extra={"screen_replay": 0.05, "print_replay": 0.05, "synthetic": 0.05}),
     ]
     v = judge(q, lanes, apply_screen_replay_hard_gate=False)
     assert v.authenticity == "REAL", f"real ID with a printed pattern must not auto-fail, got {v.authenticity}"
@@ -231,6 +233,202 @@ def test_lane_a_false_positive_alone_does_not_abstain():
     )
     assert not any("disagree" in r.text for r in v.reasons), v.reasons
     print("ok  Lane A's known-unreliable false positive doesn't alone trigger disagreement-abstain")
+
+
+def test_lane_a_does_not_vote():
+    """Stage 2, pinned to the measured case that motivated it (PLAN.md
+    Finding 2): mtowju5afd5obu's genuine ID image scored A=0.87@0.50,
+    C=0.03@0.70, G=0.26@0.40. With Lane A voting, the aggregate + spread
+    force a disagreement-abstain (REVIEW) -- a genuine physical card fails.
+    With Lane A's vote withheld (voting=False), the aggregate drops to
+    ~0.11 -> REAL/ACCEPT. Lane A must still show up in reasons: it stays
+    visible as evidence, it just doesn't get a vote.
+    """
+    from lanes import LaneResult
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("A", "Local synthesis (trained)", 0.87, CFG.lane_a_confidence_cap, ["stub"], voting=False),
+        LaneResult("C", "Compression / ELA", 0.03, 0.70),
+        LaneResult("G", "Screen/print replay", 0.26, CFG.screen_replay_confidence),
+        LaneResult("H", "Visual synthesis & replay check", 0.05, CFG.vlm_confidence_cap,
+                   ["stub clean VLM read"], extra={"screen_replay": 0.05, "print_replay": 0.05, "synthetic": 0.05}),
+    ]
+    # This models the ID image (mtowju5afd5obu): Lane G's hard gate is
+    # selfie-only (see judge.py/main.py), so it's disabled here exactly as
+    # main.py disables it for the ID -- otherwise Lane G's own 0.26 (>
+    # screen_replay_reject_above=0.15) would hard-fail before the judge
+    # ever reaches the weighted average this test is about.
+    v = judge(q, lanes, apply_screen_replay_hard_gate=False)
+    assert v.authenticity == "REAL", f"Lane A must not force a disagreement-abstain, got {v.authenticity}"
+    assert v.decision == "ACCEPT", v.decision
+    assert any(r.lane == "A" for r in v.reasons), "Lane A must stay visible in reasons even without a vote"
+    print(f"ok  Lane A stays visible but doesn't vote: aggregate={v.score:.3f} decision={v.decision}")
+
+
+def test_lane_h_screen_replay_rejects_id_document():
+    """4 of 6 real attacks in the measured sample arrive through the ID
+    image (PLAN.md Finding 4). Lane H's screen_replay must hard-fail the ID
+    document even though apply_screen_replay_hard_gate=False is passed for
+    it -- that flag exists only to suppress Lane G's guilloche false
+    positive, not to blind the judge to a screen-replayed ID (see
+    judge.py's vlm_hit block).
+    """
+    from lanes import LaneResult
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("B", "Noise residual", 0.02, 0.9),
+        LaneResult("C", "Compression / ELA", 0.03, 0.9),
+        LaneResult("G", "Screen/print replay", 0.10, CFG.screen_replay_confidence),
+        LaneResult(
+            "H", "Visual synthesis & replay check", 1.0, CFG.vlm_confidence_cap,
+            ["VLM cues: browser_tabs, window_chrome, thumbnail_filmstrip."],
+            extra={"screen_replay": 1.0, "print_replay": 0.0, "synthetic": 0.0},
+        ),
+    ]
+    v = judge(q, lanes, apply_screen_replay_hard_gate=False)
+    assert v.decision == "REJECT", f"Lane H screen_replay must hard-fail the ID image, got {v.decision}"
+    assert v.authenticity == "LIKELY_FAKE", v.authenticity
+    assert any(r.lane == "H" for r in v.reasons), v.reasons
+    print("ok  Lane H screen_replay hard-fails an ID document despite Lane G's gate being off")
+
+
+def test_lane_h_print_replay_ignored_on_id_document():
+    """Measured (PLAN.md Finding 4): a genuine paper Aadhaar scored
+    print_replay=0.95 -- correctly, it really is printed paper. Counting
+    that on the ID image would false-reject a real document, exactly the
+    trap Lane G's guilloche false positive taught. is_id_document=True
+    must drop print_replay from both the lane's own score and the judge's
+    hard gate; the raw value must still be visible in `extra` for
+    diagnostics.
+    """
+    import os
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    import lane_h_vlm
+    from lanes import LaneResult
+
+    parsed = {
+        "screen_replay": 0.05, "print_replay": 0.95, "synthetic": 0.05,
+        "cues": ["halftone_dots", "paper_fibre", "page_curl"],
+    }
+    prev_key = os.environ.get("GROQ_API_KEY")
+    os.environ["GROQ_API_KEY"] = "test-key"
+    try:
+        with patch.object(lane_h_vlm, "_CACHE_DIR", Path(tempfile.mkdtemp())), \
+             patch.object(lane_h_vlm, "_downscale_jpeg_b64", return_value="stub"), \
+             patch.object(lane_h_vlm, "_query", return_value=(parsed, None)):
+            r = lane_h_vlm.lane_h_vlm(b"id-card-stub-bytes", np.zeros((64, 64, 3), np.uint8), is_id_document=True)
+    finally:
+        if prev_key is not None:
+            os.environ["GROQ_API_KEY"] = prev_key
+        else:
+            os.environ.pop("GROQ_API_KEY", None)
+
+    assert r.score < CFG.vlm_replay_reject_above, f"print_replay must not leak into the ID score, got {r.score}"
+    assert r.extra["print_replay"] == 0.95, "the raw value must still be visible for diagnostics"
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("B", "Noise residual", 0.02, 0.9),
+        LaneResult("C", "Compression / ELA", 0.03, 0.9),
+        r,
+    ]
+    v = judge(q, lanes, apply_screen_replay_hard_gate=False)
+    assert v.decision != "REJECT", f"a genuine printed ID must not hard-fail on print_replay, got {v.decision}"
+    print("ok  Lane H ignores print_replay on the ID document (genuine paper Aadhaar case)")
+
+
+def test_lane_h_print_replay_rejects_selfie():
+    """On the selfie (not an ID document), print_replay is a valid signal
+    -- nobody's live selfie is printed paper -- so it must both count in
+    the lane's own aggregate score and hard-fail via the judge's
+    selfie-only gate (apply_screen_replay_hard_gate defaults True there).
+    """
+    import os
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    import lane_h_vlm
+    from lanes import LaneResult
+
+    parsed = {"screen_replay": 0.05, "print_replay": 0.95, "synthetic": 0.05, "cues": ["halftone_dots"]}
+    prev_key = os.environ.get("GROQ_API_KEY")
+    os.environ["GROQ_API_KEY"] = "test-key"
+    try:
+        with patch.object(lane_h_vlm, "_CACHE_DIR", Path(tempfile.mkdtemp())), \
+             patch.object(lane_h_vlm, "_downscale_jpeg_b64", return_value="stub"), \
+             patch.object(lane_h_vlm, "_query", return_value=(parsed, None)):
+            r = lane_h_vlm.lane_h_vlm(b"selfie-stub-bytes", np.zeros((64, 64, 3), np.uint8), is_id_document=False)
+    finally:
+        if prev_key is not None:
+            os.environ["GROQ_API_KEY"] = prev_key
+        else:
+            os.environ.pop("GROQ_API_KEY", None)
+
+    assert r.score >= CFG.vlm_replay_reject_above, f"print_replay must count toward a selfie's own score, got {r.score}"
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("B", "Noise residual", 0.02, 0.9),
+        LaneResult("C", "Compression / ELA", 0.03, 0.9),
+        r,
+    ]
+    v = judge(q, lanes)  # apply_screen_replay_hard_gate defaults True (selfie)
+    assert v.decision == "REJECT", f"print_replay must hard-fail a selfie, got {v.decision}"
+    print("ok  Lane H print_replay hard-fails a selfie")
+
+
+def test_vlm_rate_limited_abstains_not_guesses():
+    """The bug this fixes: the retired lane_a_refine.py silently fell back
+    to Lane A's raw (possibly wrong) score on any Groq failure, including a
+    429. Lane H must instead retry once (after sleeping the parsed
+    Retry-After delay) and then ABSTAIN with confidence 0.0 and a visible
+    reason -- never fall through to a guessed score.
+    """
+    import os
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import MagicMock, patch
+
+    import lane_h_vlm
+
+    class _FakeResponse:
+        status_code = 429
+        text = '{"error": "Please try again in 0.01s"}'
+
+    fake_client = MagicMock()
+    fake_client.__enter__ = MagicMock(return_value=fake_client)
+    fake_client.__exit__ = MagicMock(return_value=False)
+    fake_client.post = MagicMock(return_value=_FakeResponse())
+
+    prev_key = os.environ.get("GROQ_API_KEY")
+    os.environ["GROQ_API_KEY"] = "test-key"
+    try:
+        with patch.object(lane_h_vlm, "_CACHE_DIR", Path(tempfile.mkdtemp())), \
+             patch.object(lane_h_vlm, "_downscale_jpeg_b64", return_value="stub"), \
+             patch.object(lane_h_vlm.httpx, "Client", return_value=fake_client), \
+             patch("lane_h_vlm.time.sleep") as mock_sleep:
+            r = lane_h_vlm.lane_h_vlm(b"rate-limited-stub-bytes", np.zeros((64, 64, 3), np.uint8), is_id_document=False)
+    finally:
+        if prev_key is not None:
+            os.environ["GROQ_API_KEY"] = prev_key
+        else:
+            os.environ.pop("GROQ_API_KEY", None)
+
+    assert r.score == 0.0 and r.confidence == 0.0, f"a rate-limited lane must abstain, not guess, got {r}"
+    assert mock_sleep.call_count == 1, "must sleep and retry exactly once after the first 429"
+    assert any("rate-limit" in x.lower() or "429" in x or "abstain" in x.lower() for x in r.reasons), r.reasons
+    assert fake_client.post.call_count == 2, "must attempt exactly one retry (2 total calls)"
+    print("ok  Lane H abstains (never guesses) after being rate-limited twice")
 
 
 def test_attestation_never_lowers():
@@ -338,6 +536,8 @@ def test_pair_without_face_match_never_accepts():
     lanes = [
         LaneResult("B", "Noise residual", 0.05, 0.8),
         LaneResult("C", "Compression / ELA", 0.10, 0.8),
+        LaneResult("H", "Visual synthesis & replay check", 0.05, CFG.vlm_confidence_cap,
+                   ["stub clean VLM read"], extra={"screen_replay": 0.05, "print_replay": 0.05, "synthetic": 0.05}),
     ]
     v = judge(q, lanes, face_similarity=None, require_identity=True)
     assert v.authenticity == "REAL", v.authenticity
@@ -514,6 +714,11 @@ if __name__ == "__main__":
         test_screen_replay_hard_gate_can_be_disabled_for_id_document,
         test_screen_replay_rejects_at_real_observed_boundary,
         test_lane_a_false_positive_alone_does_not_abstain,
+        test_lane_a_does_not_vote,
+        test_lane_h_screen_replay_rejects_id_document,
+        test_lane_h_print_replay_ignored_on_id_document,
+        test_lane_h_print_replay_rejects_selfie,
+        test_vlm_rate_limited_abstains_not_guesses,
         test_attestation_never_lowers,
         test_identity_axis_independent,
         test_mismatch_rejects_even_when_authenticity_abstains,
