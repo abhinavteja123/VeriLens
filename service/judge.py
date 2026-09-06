@@ -70,6 +70,7 @@ def judge(
     face_similarity: float | None = None,
     require_identity: bool = False,
     low_quality_face: bool = False,
+    apply_screen_replay_hard_gate: bool = True,
 ) -> Verdict:
     reasons: list[Reason] = []
 
@@ -125,6 +126,45 @@ def judge(
                                f"{CFG.min_lane_confidence:.2f}).", "warn")
             )
 
+    # A confident, widespread screen/print-replay signature (Lane G) must
+    # not be silently averaged away by lanes B/C, which read a
+    # re-photographed screen as ordinary clean pixels and would dilute a
+    # genuine replay down to "REAL" -- same mistake an identity MISMATCH
+    # used to suffer before its own carve-out.
+    #
+    # Restricted to apply_screen_replay_hard_gate callers only (main.py:
+    # the selfie, not the ID document). Found live: a real Aadhaar card's
+    # printed security pattern (a guilloche background, common on ID
+    # cards) lit up 8/16 patches (z=6.3) -- physically indistinguishable
+    # from screen pixel-grid moire by an FFT alone, and Lane G is
+    # explicitly "new and unvalidated" by its own docstring. That
+    # false-positive class is a document-print phenomenon, not a selfie
+    # one, so the hard gate only fires where the actual replay/deepfake
+    # threat is: a live selfie has no legitimate reason to contain a
+    # widespread periodic security pattern the way a printed ID does.
+    screen_hit = None
+    if apply_screen_replay_hard_gate:
+        screen_hit = next(
+            (r for r in usable if r.lane == "G" and r.score >= CFG.screen_replay_reject_above),
+            None,
+        )
+    if screen_hit is not None:
+        reasons.append(Reason(
+            "G", f"Screen/print replay signature (score {screen_hit.score:.2f}) is treated "
+                 "as an independent hard fail, not averaged against other lanes.", "critical",
+        ))
+        severity_order = {"critical": 0, "warn": 1, "info": 2}
+        reasons.sort(key=lambda r: severity_order[r.severity])
+        return Verdict(
+            authenticity="LIKELY_FAKE",
+            identity=identity,
+            decision="REJECT",
+            confidence=CFG.screen_replay_confidence,
+            confidence_is_calibrated=CFG.confidence_is_calibrated,
+            score=round(screen_hit.score, 3),
+            reasons=reasons,
+        )
+
     if len(usable) < CFG.min_usable_lanes:
         reasons.append(
             Reason("J", f"Abstaining: only {len(usable)} of {len(lane_results)} lanes could "
@@ -139,9 +179,30 @@ def judge(
     # Gate 3: do the lanes actually agree? Averaging away a genuine conflict
     # manufactures false confidence, so a real disagreement abstains instead.
     spread = float(np.sqrt(np.average((scores - agg) ** 2, weights=weights)))
-    if spread > CFG.max_disagreement:
+
+    # But: lanes whose confidence is deliberately capped (CFG.
+    # lane_a_confidence_cap, CFG.screen_replay_confidence) are ALREADY
+    # marked known-unreliable/unvalidated -- Lane A in particular has
+    # confirmed, documented false positives on real photos outside its
+    # training distribution (see HANDOFF.md). One capped lane's own noise
+    # disagreeing with everything else is not the same signal as two
+    # validated lanes genuinely conflicting, so it must not alone trigger
+    # this gate -- that would route every real photo Lane A false-positives
+    # on to REVIEW, defeating the point of capping its weight to begin
+    # with. Disagreement is judged on the lanes that clear a real trust
+    # bar; capped lanes still fully count in the aggregate score above.
+    core = [r for r in usable if r.confidence >= CFG.core_disagreement_min_confidence]
+    if len(core) >= 2:
+        core_scores = np.array([r.score for r in core], dtype=float)
+        core_weights = np.array([r.confidence for r in core], dtype=float)
+        core_agg = float(np.average(core_scores, weights=core_weights))
+        disagree_spread = float(np.sqrt(np.average((core_scores - core_agg) ** 2, weights=core_weights)))
+    else:
+        disagree_spread = spread  # not enough trusted lanes to judge agreement separately
+
+    if disagree_spread > CFG.max_disagreement:
         reasons.append(
-            Reason("J", f"Abstaining: lanes disagree (spread {spread:.2f} > "
+            Reason("J", f"Abstaining: lanes disagree (spread {disagree_spread:.2f} > "
                         f"{CFG.max_disagreement:.2f}). Conflicting evidence.", "warn")
         )
         v = _abstain(reasons, identity)

@@ -128,6 +128,111 @@ def test_lane_disagreement_abstains():
     print("ok  conflicting lanes abstain")
 
 
+def test_screen_replay_rejects_despite_dilution():
+    """The actual bug this fixes: Lane G's confidence is deliberately capped
+    low (screen_replay_confidence) so it can't dominate the weighted
+    average -- but that meant a confirmed screen replay (Lane G fires hard)
+    got averaged away to REAL by lanes B/C, which read a re-photographed
+    screen as ordinary clean pixels and carry much higher confidence. Uses
+    the exact scores a live confirmed screen replay produces (see
+    HANDOFF.md #8): B/C read clean at high confidence, Lane G fires at
+    ~0.39 (z~10, coverage saturated) with its capped 0.4 confidence.
+    """
+    from lanes import LaneResult
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("B", "Noise residual", 0.05, 0.95),
+        LaneResult("C", "Compression / ELA", 0.05, 0.95),
+        LaneResult("A", "Local synthesis", 0.10, CFG.lane_a_confidence_cap),
+        LaneResult("G", "Screen/print replay", 0.39, CFG.screen_replay_confidence),
+    ]
+    v = judge(q, lanes)
+    assert v.decision == "REJECT", f"screen replay must REJECT, got {v.decision}"
+    assert v.authenticity == "LIKELY_FAKE", v.authenticity
+    print("ok  confident screen replay rejects instead of being averaged away")
+
+
+def test_screen_replay_hard_gate_can_be_disabled_for_id_document():
+    """Found live: a real Aadhaar card's own printed security pattern
+    (a guilloche background) lit up 8/16 patches at z=6.3 -> Lane G score
+    ~0.17, physically indistinguishable from screen moire by an FFT alone.
+    Every other lane read the same capture as clean. Auto-rejecting a real
+    ID on this uncalibrated, document-print-confused signal is wrong -- the
+    hard gate is selfie-only (see main.py); on the ID image it's disabled
+    and Lane G's score just joins the ordinary weighted average, where its
+    capped confidence lets the other clean lanes carry the verdict.
+    """
+    from lanes import LaneResult
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("B", "Noise residual", 0.05, 0.9),
+        LaneResult("C", "Compression / ELA", 0.02, 0.9),
+        LaneResult("A", "Local synthesis", 0.46, CFG.lane_a_confidence_cap),
+        LaneResult("G", "Screen/print replay", 0.17, CFG.screen_replay_confidence),
+    ]
+    v = judge(q, lanes, apply_screen_replay_hard_gate=False)
+    assert v.authenticity == "REAL", f"real ID with a printed pattern must not auto-fail, got {v.authenticity}"
+    assert v.decision == "ACCEPT", v.decision
+    print("ok  screen-replay hard gate disabled for ID document lets a real printed pattern accept")
+
+
+def test_screen_replay_rejects_at_real_observed_boundary():
+    """Found live: a confirmed screen replay (ID card photographed with a
+    laptop screen filling the background) scored 10/16 patches at z=8.4 ->
+    Lane G score ~0.297 -- below the original screen_replay_reject_above of
+    0.3, so it slipped through to ACCEPT despite Lane G's own text already
+    calling it a widespread moire pattern. Locks in the corrected threshold
+    against this exact real observed score.
+    """
+    from lanes import LaneResult
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("B", "Noise residual", 0.05, 0.9),
+        LaneResult("C", "Compression / ELA", 0.02, 0.9),
+        LaneResult("A", "Local synthesis", 0.01, CFG.lane_a_confidence_cap),
+        LaneResult("G", "Screen/print replay", 0.297, CFG.screen_replay_confidence),
+    ]
+    v = judge(q, lanes)
+    assert v.decision == "REJECT", f"real observed screen-replay score must REJECT, got {v.decision}"
+    print("ok  real observed screen-replay boundary score (0.297) rejects")
+
+
+def test_lane_a_false_positive_alone_does_not_abstain():
+    """The other bug found via live testing on a real ID+selfie: Lane A
+    confidently false-positives on real photos off its training
+    distribution (score 1.00, see HANDOFF.md), which conflicted with lanes
+    B/C/G reading the same photo as clean and blew the disagreement spread
+    past max_disagreement -- routing every real capture Lane A happens to
+    misfire on to REVIEW. Lane A's confidence is already capped
+    (lane_a_confidence_cap) precisely because it's known-unreliable
+    off-distribution, so its own noise must not alone count as "the lanes
+    disagree" when the validated lanes (B, C) agree with each other.
+    """
+    from lanes import LaneResult
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("B", "Noise residual", 0.05, 0.9),
+        LaneResult("C", "Compression / ELA", 0.03, 0.9),
+        LaneResult("A", "Local synthesis", 1.00, CFG.lane_a_confidence_cap),
+        LaneResult("G", "Screen/print replay", 0.10, CFG.screen_replay_confidence),
+    ]
+    v = judge(q, lanes)
+    assert v.authenticity == "REAL", (
+        f"validated lanes agree real; a capped Lane A false positive must not "
+        f"force an abstain, got {v.authenticity}"
+    )
+    assert not any("disagree" in r.text for r in v.reasons), v.reasons
+    print("ok  Lane A's known-unreliable false positive doesn't alone trigger disagreement-abstain")
+
+
 def test_attestation_never_lowers():
     """Absence of attestation must not be treated as evidence of fakery."""
     from lanes import LaneResult
@@ -405,6 +510,10 @@ if __name__ == "__main__":
         test_lane_b_flags_synthetic_smooth_patch,
         test_uncertainty_band_abstains,
         test_lane_disagreement_abstains,
+        test_screen_replay_rejects_despite_dilution,
+        test_screen_replay_hard_gate_can_be_disabled_for_id_document,
+        test_screen_replay_rejects_at_real_observed_boundary,
+        test_lane_a_false_positive_alone_does_not_abstain,
         test_attestation_never_lowers,
         test_identity_axis_independent,
         test_mismatch_rejects_even_when_authenticity_abstains,

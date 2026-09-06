@@ -84,6 +84,24 @@ def test_localised_pattern_scores_lower_than_widespread():
           f"widespread={widespread.score:.2f} localised={localised.score:.2f}")
 
 
+def test_strong_localised_signal_scores_zero():
+    """Found live: a real ID card's hologram/foil strip produced a strong
+    but localised periodic peak (high severity, ~1/16 patches) that used to
+    still score ~0.17 under a linear coverage ramp -- contradicting this
+    lane's own reasons text, which already correctly calls it "localised,
+    not widespread". Below MIN_COVERAGE_FRACTION, severity must not matter
+    at all: it's the same design boundary lane_screen.py's docstring
+    already describes for the hologram-vs-replay distinction.
+    """
+    img = _localised_moire(period_px=3)  # tighter grating -> higher severity
+    r = lane_screen_replay(img)
+    assert r.score == 0.0, (
+        f"a localised signal, however severe, must score 0 below the "
+        f"coverage floor, got {r.score:.3f}"
+    )
+    print("ok  strong localised signal scores 0 regardless of severity")
+
+
 def test_confidence_is_capped_low():
     """Regardless of what it finds, this lane must never claim more trust
     than CFG.screen_replay_confidence -- it is new and unvalidated."""
@@ -104,6 +122,7 @@ if __name__ == "__main__":
         test_natural_texture_reads_clean,
         test_moire_grating_flagged,
         test_localised_pattern_scores_lower_than_widespread,
+        test_strong_localised_signal_scores_zero,
         test_confidence_is_capped_low,
         test_tiny_image_abstains,
     ]:

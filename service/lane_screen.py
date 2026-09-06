@@ -37,6 +37,22 @@ screens and good print quality reduce or eliminate the pattern regardless
 of how widespread the check looks. Neither risk is calibrated away here --
 the low confidence cap is the honest answer until real calibration data
 exists, not a claim this lane is reliable.
+
+TILT (found live, not guessed): the patch grid above assumes the
+photographed screen fills the frame axis-aligned. A confirmed real replay
+where the user held the phone at an angle to the screen (screen tilted
+~15-20 degrees, dark bezel/background filling the rest) scored 0.0 --
+every patch that straddled the screen's tilted edge mixed real periodic
+screen content with flat non-periodic bezel, diluting each straddling
+patch's own FFT below the per-patch cluster threshold, so only 4/16
+scattered patches registered at all (well under MIN_COVERAGE_FRACTION).
+Fixed by re-gridding the frame at a few candidate rotation angles and
+keeping whichever reading scores highest: at the angle closest to the
+screen's actual tilt, the screen's rectangular boundary realigns with the
+axis-aligned patches, so patches stop straddling the edge and coverage
+recovers. A dead-on, frame-filling replay already scores highest at 0
+degrees, so this never changes that case -- it only recovers the tilted
+one.
 """
 
 from __future__ import annotations
@@ -70,6 +86,12 @@ MIN_PATCH_SIDE_PX = 96
 # against this floor, not raw hit-count, so "most patches" saturates to
 # full coverage regardless of the exact grid size.
 MIN_COVERAGE_FRACTION = 0.4
+# Candidate frame rotations tried before gridding (see module docstring,
+# TILT). 0 first and always kept unless a rotation strictly beats it, so a
+# dead-on replay's reading never changes. A handful of coarse angles, not a
+# fine search -- this recovers a screen tilted at a rough angle, it doesn't
+# need to find the exact tilt to realign the grid well enough to help.
+ROTATION_ANGLES_DEG = (0, 15, -15, 30, -30)
 
 
 def _patch_max_z(gray_patch: np.ndarray) -> float:
@@ -100,13 +122,20 @@ def _patch_max_z(gray_patch: np.ndarray) -> float:
     return float(z[mask].max())
 
 
-def lane_screen_replay(bgr: np.ndarray) -> LaneResult:
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float64)
+def _rotated(gray: np.ndarray, angle_deg: float) -> np.ndarray:
+    if angle_deg == 0:
+        return gray
     h, w = gray.shape
-    if min(h, w) < 64:
-        return LaneResult("G", "Screen/print replay", 0.0, 0.0,
-                          ["Image too small for frequency analysis."])
+    m = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), angle_deg, 1.0)
+    # Reflect, not a constant fill: a hard black border would itself be a
+    # sharp non-periodic edge sitting right at the patch grid's own lines.
+    return cv2.warpAffine(gray, m, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
 
+
+def _grid_read(gray: np.ndarray) -> tuple[float, int, int, float]:
+    """One pass of the patch-grid moire read over an already-oriented frame.
+    Returns (score, hit_patches, total_patches, max_z)."""
+    h, w = gray.shape
     ph, pw = h // PATCH_GRID, w // PATCH_GRID
     if ph < MIN_PATCH_SIDE_PX or pw < MIN_PATCH_SIDE_PX:
         # Too small to subdivide meaningfully at this resolution -- one
@@ -129,16 +158,47 @@ def lane_screen_replay(bgr: np.ndarray) -> LaneResult:
         score = 0.0
     else:
         severity = float(np.clip((max_z - CFG.outlier_z) / (SEVERITY_SATURATION_Z - CFG.outlier_z), 0.0, 1.0))
-        coverage = float(np.clip((hit_patches / total_patches) / MIN_COVERAGE_FRACTION, 0.0, 1.0))
+        # Hard floor, not a ramp: found live, a strong-but-localised hologram
+        # foil strip (1-2 patches, high severity) still scored a meaningful
+        # partial coverage under a linear clip(hit_frac/floor) -- silently
+        # contradicting the reasons text below, which already calls the
+        # same reading "localised, not widespread". Below the floor this
+        # isn't a full-frame replay by this lane's own stated design (see
+        # module docstring), so it must contribute nothing, regardless of
+        # how severe the localised peak is.
+        coverage = 1.0 if (hit_patches / total_patches) >= MIN_COVERAGE_FRACTION else 0.0
         score = severity * coverage
+    return score, hit_patches, total_patches, max_z
+
+
+def lane_screen_replay(bgr: np.ndarray) -> LaneResult:
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float64)
+    h, w = gray.shape
+    if min(h, w) < 64:
+        return LaneResult("G", "Screen/print replay", 0.0, 0.0,
+                          ["Image too small for frequency analysis."])
+
+    # Try a few candidate frame rotations and keep whichever reading scores
+    # highest (see module docstring, TILT). 0 degrees is tried first and is
+    # never beaten by a rotation that isn't a genuine improvement, so a
+    # dead-on replay's score/reasons are unaffected.
+    best_angle = 0
+    best = _grid_read(gray)
+    for angle in ROTATION_ANGLES_DEG[1:]:
+        candidate = _grid_read(_rotated(gray, angle))
+        if candidate[0] > best[0]:
+            best, best_angle = candidate, angle
+    score, hit_patches, total_patches, max_z = best
 
     reasons = [f"Checked {total_patches} spatial patch(es) for a periodic frequency signature."]
     if hit_patches == 0:
         reasons.append("No periodic moire signature detected.")
     elif (hit_patches / total_patches) >= MIN_COVERAGE_FRACTION:
+        angle_note = f" (frame re-checked at a {best_angle:+d} degree tilt)" if best_angle else ""
         reasons.append(
             f"{hit_patches}/{total_patches} patches show an unusually strong periodic "
-            f"peak (max z={max_z:.1f}), consistent with a screen/print moire pattern."
+            f"peak (max z={max_z:.1f}), consistent with a screen/print moire pattern"
+            f"{angle_note}."
         )
     else:
         reasons.append(

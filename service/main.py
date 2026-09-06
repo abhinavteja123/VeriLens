@@ -209,8 +209,15 @@ async def analyze(
 
     # Authenticity: judge each image on its own, then keep the worse one.
     # A genuine selfie paired with a doctored ID is still a failed check.
+    # Lane G's hard-fail gate (see judge.py) only applies to the selfie: a
+    # printed ID document can legitimately carry its own periodic security
+    # pattern (a guilloche background) that an FFT can't tell apart from
+    # screen moire, but a live selfie has no legitimate reason to. On the
+    # ID image Lane G still runs and still contributes as ordinary soft
+    # evidence in the weighted average -- it just can't unilaterally force
+    # a verdict there.
     rank = {"LIKELY_FAKE": 0, "INSUFFICIENT_EVIDENCE": 1, "REAL": 2}
-    id_v = judge(id_q, id_results, attested=False)
+    id_v = judge(id_q, id_results, attested=False, apply_screen_replay_hard_gate=False)
     selfie_v = judge(s_q, s_results, attested=verified)
     worse_is_id = rank[id_v.authenticity] < rank[selfie_v.authenticity]
 
@@ -222,7 +229,8 @@ async def analyze(
     # decision reflects both axes rather than being patched afterwards.
     if worse_is_id:
         final = judge(id_q, id_results, attested=False, face_similarity=sim,
-                       require_identity=True, low_quality_face=low_quality_face)
+                       require_identity=True, low_quality_face=low_quality_face,
+                       apply_screen_replay_hard_gate=False)
     else:
         final = judge(s_q, s_results, attested=verified, face_similarity=sim,
                        require_identity=True, low_quality_face=low_quality_face)

@@ -182,7 +182,7 @@ function statCallout(slide, { x, y, w, h, num, label, numColor = YELLOW }) {
   const layers = [
     { icon: "layercapture", h: "1. Capture", d: "ID document photo + live selfie. Selfie is camera-only — no gallery path." },
     { icon: "layergate", h: "2. Quality Gate", d: "Resolution, blur, JPEG quality checked first. Unreadable input is rejected before any lane runs." },
-    { icon: "layerlanes", h: "3. Detection Lanes", d: "Five independent forensic checks run in parallel — synthesis, noise, compression, attestation, face match." },
+    { icon: "layerlanes", h: "3. Detection Lanes", d: "Six independent forensic checks run in parallel — synthesis, noise, compression, attestation, face match, replay detection." },
     { icon: "layerjudge", h: "4. Judge", d: "Cross-checks which lanes agree. Disagreement or low coverage → abstain, not guess." },
     { icon: "layerchain", h: "5. Verdict + Anchor", d: "Three-axis verdict returned, signed, and anchored on Sepolia — the decision is now auditable." },
   ];
@@ -205,16 +205,17 @@ function statCallout(slide, { x, y, w, h, num, label, numColor = YELLOW }) {
 {
   const s = pres.addSlide({ masterName: "DARK" });
   kicker(s, "Layer 3, Expanded");
-  title(s, "Five independent lanes. One accountable judge.", { size: 28 });
+  title(s, "Six independent lanes. One accountable judge.", { size: 28 });
 
   const lanes = [
     { icon: "layers", n: "A", h: "Local Synthesis", d: "Patch-level, trained on INP-X exchanged images — reads content, not the global shortcut." },
     { icon: "magnify", n: "B", h: "Noise Residual", d: "Flags regions unnaturally clean for their detail level — the signature of generated content." },
     { icon: "code", n: "C", h: "Compression / ELA", d: "Recompression error inconsistent with local detail — catches splices and pasted portraits." },
-    { icon: "camera", n: "D", h: "Capture Attestation", d: "Live camera vs. upload. Raises confidence only — never counted as evidence of fakery." },
+    { icon: "camera", n: "D", h: "Capture Attestation", d: "Signed, single-use nonce proves live capture — absence is never evidence of fakery." },
     { icon: "usershield", n: "E", h: "Face Match", d: "ArcFace similarity between the ID photo and the selfie — the identity axis." },
+    { icon: "mobile", n: "G", h: "Replay Detection", d: "Patch-wise frequency analysis catches a screen or printout held up to the camera." },
   ];
-  const cw = 2.02, gap = 0.135, startX = 0.6, cy = 2.05, ch = 2.85;
+  const cw = 1.74, gap = 0.115, startX = 0.6, cy = 2.05, ch = 2.85;
   lanes.forEach((l, i) => {
     const x = startX + i * (cw + gap);
     s.addShape("roundRect", { x, y: cy, w: cw, h: ch, rectRadius: 0.09, fill: { color: CHARCOAL }, line: { color: "2E2E2E", width: 0.75 } });
@@ -328,7 +329,7 @@ function statCallout(slide, { x, y, w, h, num, label, numColor = YELLOW }) {
   const claims = [
     { icon: "info", h: "No novelty claim", d: "Established forensics. Our contribution is the KYC-specific system, not a new algorithm." },
     { icon: "scale", h: "Confidence uncalibrated", d: "Flagged false until validated — never shown as a real probability." },
-    { icon: "eyeslash", h: "Attestation unverified server-side", d: "Caught mid-build — earns zero confidence bonus until a signed nonce makes it real." },
+    { icon: "eyeslash", h: "Trained lane still calibrating", d: "Confidence capped until validated on real-world photos, not just its own training set — a broader retrain is in progress." },
   ];
   let ry = 2.1;
   claims.forEach((c) => {

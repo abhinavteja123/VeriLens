@@ -44,6 +44,23 @@ class Config:
     # spot-checked manually only. Capped low so it can contribute evidence
     # without dominating the judge until real calibration data exists.
     screen_replay_confidence: float = 0.4
+    # Score above which Lane G's finding is trusted as an independent hard
+    # fail (see judge.py) instead of being averaged against lanes B/C, which
+    # read a re-photographed screen as ordinary clean pixels and would
+    # otherwise dilute a genuine replay down to "REAL".
+    # Was 0.3 -- too high, found live: a confirmed screen replay (10/16
+    # patches, z=8.4 -- coverage saturated, Lane G's own text already calls
+    # this "consistent with a screen/print moire pattern") scored 0.297 and
+    # slipped under it, because real-world z values (7.0, 8.4, ~10 across
+    # multiple live captures) sit far below lane_screen.py's
+    # SEVERITY_SATURATION_Z=20 reference point -- that constant was
+    # calibrated against an idealized synthetic test grating, not real
+    # screens. Lowered to sit safely below every real positive observed so
+    # far (0.21, 0.297) and above the 0.0 a clean photo or a localised
+    # hologram sticker scores. Still uncalibrated -- same caveat as the
+    # lane itself; revisit if a real clean/localised case ever scores
+    # this high.
+    screen_replay_reject_above: float = 0.15
 
     # ---- judge ----
     # Gap between these two is the abstention band. Deliberately wide: in KYC
@@ -52,6 +69,12 @@ class Config:
     fake_above: float = 0.65
     min_usable_lanes: int = 2  # fewer than this and there is nothing to cross-check
     max_disagreement: float = 0.28  # spread above which lanes conflict -> abstain
+    # Below this confidence a lane is judged too provisional to count toward
+    # "the lanes disagree" (see judge.py Gate 3) -- just above lane_a_
+    # confidence_cap (0.5) and screen_replay_confidence (0.4), the two lanes
+    # this exists for. Their own known unreliability shouldn't alone force
+    # an abstain when the lanes that ARE validated agree with each other.
+    core_disagreement_min_confidence: float = 0.55
     attested_bonus: float = 0.10  # attestation RAISES confidence only, never lowers
 
     # Cosine similarity on face embeddings (Lane E). Gap between them is the

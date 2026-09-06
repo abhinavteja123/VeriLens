@@ -405,7 +405,41 @@ app's root `package.json` and was reverted. If you regenerate the deck,
   edited, background-removed image — very likely a correct catch, not a
   false positive. No fix applied; nothing demonstrated to be broken.
 
-## 9. If you only have 10 minutes before presenting
+## 9. Open items — what's not yet fixed
+
+Ranked by priority, honestly, not padded:
+
+1. **Lane A's actual accuracy.** Still the main unresolved thing. The face-
+   crop restriction and confidence cap (§6) are damage control, not a fix —
+   they stop it from dominating the judge, they don't make it accurate. The
+   retrain (§6) is the real fix and is not done yet. Until it lands, expect
+   continued REVIEW-heavy results on real photos — safe, not wrong, just
+   imprecise.
+2. **`lane_a_refine.py`'s flakiness** (§8) — inherent to using an external,
+   non-deterministic LLM with a free-tier rate limit. Not fixable in code
+   without removing the secondary check entirely. A paid Groq tier would
+   reduce (not eliminate) the rate-limit fallback case.
+3. **Print-attack untested.** Screen-replay (photographing a screen) is
+   thoroughly tested and Lane G catches it (§8). A physically PRINTED photo
+   held up to the camera has a different physical signature entirely
+   (halftone dot pattern, paper texture, no pixel-grid moire) — Lane G won't
+   catch this, and nothing else is built to.
+4. **Review queue approve/reject buttons** (`app/(tabs)/review.tsx`) —
+   verified that cases correctly land in the queue, never verified the
+   approve/reject actions themselves end-to-end.
+5. **Real-time deepfake / live face-swap during video capture** — out of
+   scope for testing without specialised tooling (virtual camera + face-swap
+   software); not evaluated at all this session.
+6. **No user-facing privacy disclosure for `lane_a_refine.py`** (§8) — sends
+   real ID/selfie images to Groq with the project owner's own knowing
+   consent, but no in-app consent flow exists yet. Needed before any real
+   deployment, not needed for continued local testing.
+7. **Android Studio / native build never exercised this session** — all live
+   testing went through Expo Go on a physical phone. `android/` was
+   generated (`npx expo prebuild`) but a native APK build was never actually
+   run and verified.
+
+## 10. If you only have 10 minutes before presenting
 
 1. `git log --oneline` — 25+ commits, all real, all authored by
    `abhinavteja123`, no AI-authorship trailers.
